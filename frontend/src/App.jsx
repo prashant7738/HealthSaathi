@@ -1,38 +1,97 @@
-import React, { Suspense } from 'react';
-import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { LanguageProvider } from './context/LanguageContext';
-
-// Pages
+import React from 'react';
+import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { AppProvider } from './context/AppContext';
+import { useApp } from './context/AppContext';
+import LanguageToggle from './components/LanguageToggle';
 import ChatPage from './pages/ChatPage';
 import MapPage from './pages/MapPage';
 import DashboardPage from './pages/DashboardPage';
-import ProfilePage from './pages/ProfilePage';
 
-// Components
-import Sidebar from './components/Sidebar';
-import LoadingSpinner from './components/LoadingSpinner';
-
-function App() {
+function Header() {
+  const { t } = useApp();
   return (
-    <LanguageProvider>
-      <BrowserRouter>
-        <div className="flex h-screen bg-gradient-to-br from-primary-50 to-primary-100">
-          <Sidebar />
-          <div className="flex-1 overflow-hidden">
-            <Suspense fallback={<LoadingSpinner />}>
-              <Routes>
-                <Route path="/" element={<ChatPage />} />
-                <Route path="/chat" element={<ChatPage />} />
-                <Route path="/map" element={<MapPage />} />
-                <Route path="/dashboard" element={<DashboardPage />} />
-                <Route path="/profile" element={<ProfilePage />} />
-              </Routes>
-            </Suspense>
-          </div>
+    <header className="bg-gradient-to-r from-nepal-blue to-primary-700 text-white px-4 py-3 flex items-center justify-between shadow-md flex-shrink-0">
+      <div className="flex items-center gap-2">
+        {/* Nepal flag colors accent */}
+        <div className="flex flex-col gap-0.5 mr-1">
+          <div className="w-4 h-1.5 rounded-sm bg-nepal-red" />
+          <div className="w-4 h-1.5 rounded-sm bg-white/80" />
         </div>
-      </BrowserRouter>
-    </LanguageProvider>
+        <div>
+          <h1 className="font-bold text-base leading-tight">{t.appName}</h1>
+          <p className="text-xs text-white/70 leading-tight">{t.tagline}</p>
+        </div>
+      </div>
+      <LanguageToggle />
+    </header>
   );
 }
 
-export default App;
+function BottomNav() {
+  const { t } = useApp();
+  const tabs = [
+    { to: '/chat', label: t.nav.chat, icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
+      </svg>
+    )},
+    { to: '/map', label: t.nav.map, icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7" />
+      </svg>
+    )},
+    { to: '/dashboard', label: t.nav.dashboard, icon: (
+      <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+      </svg>
+    )},
+  ];
+
+  return (
+    <nav className="bg-white border-t border-gray-200 flex-shrink-0 safe-area-bottom">
+      <div className="flex">
+        {tabs.map(({ to, label, icon }) => (
+          <NavLink
+            key={to}
+            to={to}
+            className={({ isActive }) =>
+              `flex-1 flex flex-col items-center gap-0.5 py-2.5 text-xs font-medium transition-colors ${
+                isActive ? 'text-primary-600' : 'text-gray-400 hover:text-gray-600'
+              }`
+            }
+          >
+            {icon}
+            {label}
+          </NavLink>
+        ))}
+      </div>
+    </nav>
+  );
+}
+
+function AppShell() {
+  return (
+    <div className="flex flex-col h-screen max-w-lg mx-auto bg-gray-50 shadow-xl">
+      <Header />
+      <main className="flex-1 overflow-hidden">
+        <Routes>
+          <Route path="/" element={<Navigate to="/chat" replace />} />
+          <Route path="/chat" element={<ChatPage />} />
+          <Route path="/map" element={<MapPage />} />
+          <Route path="/dashboard" element={<DashboardPage />} />
+        </Routes>
+      </main>
+      <BottomNav />
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <BrowserRouter>
+      <AppProvider>
+        <AppShell />
+      </AppProvider>
+    </BrowserRouter>
+  );
+}

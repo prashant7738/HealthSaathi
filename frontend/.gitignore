@@ -1,26 +1,8 @@
-# Dependencies
+FRONTEND_EXPLAINED.txt
+Nepalcare Frontend Doc.docx
 node_modules/
-.pnpm-debug.log*
-
-# Build outputs
+.vite/
 dist/
-dist-ssr/
-*.local
-
-# Environment variables
+INTEGRATION_GUIDE.md
+FRONTEND_INTEGRATION_SUMMARY.md
 .env
-.env.local
-.env.*.local
-
-# IDE
-.vscode/
-.idea/
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
-
-# OS
-.DS_Store
-Thumbs.db

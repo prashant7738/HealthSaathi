@@ -7,6 +7,7 @@ from .views import (
     LogoutView,
     HistoryView
 )
+from .baato import BaatoView
 
 urlpatterns = [
     # Authentication
@@ -16,6 +17,9 @@ urlpatterns = [
     
     # Triage
     path("triage/", TriageView.as_view(), name="triage"),
+    
+    # Health Facilities (Baato API)
+    path("baato/", BaatoView.as_view(), name="baato"),
     
     # Stats & History
     path('stats/', StatsView.as_view(), name='stats'),
