@@ -12,22 +12,12 @@ from .views import (
 from .baato import BaatoView
 
 urlpatterns = [
-    # Authentication
-    path("register/", RegisterView.as_view(), name="register"),
-    path("login/", LoginView.as_view(), name="login"),
-    path("logout/", LogoutView.as_view(), name="logout"),
-    
-    # Triage
+    path("auth/register/", RegisterView.as_view(), name="register"),
+    path("auth/login/", LoginView.as_view(), name="login"),
+    path("auth/logout/", LogoutView.as_view(), name="logout"),
     path("triage/", TriageView.as_view(), name="triage"),
-    
-    # Health Facilities (Baato API)
-    path("baato/", BaatoView.as_view(), name="baato"),
-    
-    # Stats & History
     path('stats/', StatsView.as_view(), name='stats'),
     path('history/', HistoryView.as_view(), name='history'),
-    
-    # ChromaDB
     path('chromadb/stats/', ChromaDBStatsView.as_view(), name='chromadb_stats'),
     path('chromadb/context/', UserContextView.as_view(), name='user_context'),
 ]
