@@ -1,181 +1,267 @@
-import { useState, useRef } from 'react';
-import { Send, Plus, Clock, Trash2 } from 'lucide-react';
-import VoiceButton from '../components/VoiceButton';
-
-const MOCK_CHAT_HISTORY = [
-  {
-    id: 1,
-    title: 'Recent headache symptoms',
-    preview: 'Try to stay hydrated...',
-    date: new Date(Date.now() - 3600000),
-  },
-  {
-    id: 2,
-    title: 'Sleep quality issues',
-    preview: 'Establish a regular sleep...',
-    date: new Date(Date.now() - 86400000),
-  },
-  {
-    id: 3,
-    title: 'Diet recommendations',
-    preview: 'Include more vegetables...',
-    date: new Date(Date.now() - 172800000),
-  },
-];
-
-const INITIAL_MESSAGE = {
-  id: 1,
-  content: "Hello! I'm your HealthAI assistant. How can I help you with your health concerns today?",
-  sender: 'ai',
-  timestamp: new Date(),
-};
+import React, { useState, useRef, useEffect } from 'react';
+import { useTranslation } from 'react-i18next';
+import { Send, Mic, MicOff, Loader } from 'lucide-react';
+import apiClient from '../services/api';
+import voiceService from '../services/voiceService';
+import { useLanguage } from '../context/LanguageContext';
 
 export default function ChatPage() {
-  const [messages, setMessages] = useState([INITIAL_MESSAGE]);
+  const { t } = useTranslation();
+  const { currentLanguage } = useLanguage();
+  const [messages, setMessages] = useState([
+    {
+      id: 1,
+      sender: 'bot',
+      text: t('messages.welcomeMessage'),
+      timestamp: new Date(),
+    },
+  ]);
   const [input, setInput] = useState('');
-  const inputRef = useRef(null);
+  const [loading, setLoading] = useState(false);
+  const [listening, setListening] = useState(false);
+  const messagesEndRef = useRef(null);
 
-  const handleVoiceTranscript = (transcript) => {
-    setInput(transcript);
-    // Auto-focus the input field
-    if (inputRef.current) {
-      inputRef.current.focus();
-    }
+  const scrollToBottom = () => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
   };
 
-  const handleSend = () => {
+  useEffect(() => {
+    scrollToBottom();
+  }, [messages]);
+
+  const sendMessage = async () => {
     if (!input.trim()) return;
 
     const userMessage = {
-      id: messages.length + 1,
-      content: input,
+      id: Date.now(),
       sender: 'user',
+      text: input,
       timestamp: new Date(),
     };
 
-    setMessages([...messages, userMessage]);
+    setMessages((prev) => [...prev, userMessage]);
     setInput('');
+    setLoading(true);
 
-    // Simulate AI response
-    setTimeout(() => {
-      const aiMessage = {
-        id: messages.length + 2,
-        content: 'I understand your concern. Based on what you\'ve told me, I recommend consulting with a healthcare professional for a proper diagnosis. In the meantime, make sure to stay hydrated and get adequate rest.',
-        sender: 'ai',
+    try {
+      const response = await apiClient.post('/triage/', {
+        symptoms: input,
+        lat: null,
+        lng: null,
+        district: '',
+        session_id: '',
+      });
+
+      // Format the AI response into readable text
+      const data = response.data;
+      const riskColor = {
+        'HIGH': '🔴',
+        'MEDIUM': '🟡',
+        'LOW': '🟢'
+      }[data.risk] || '⚪';
+
+      const analysisText = `${riskColor} Risk Level: ${data.risk}
+
+${data.brief_advice}
+
+📋 Detailed Advice:
+${data.detailed_advice}
+
+🍎 Foods to Eat:
+${data.food_eat}
+
+❌ Foods to Avoid:
+${data.food_avoid}
+
+✅ Do's:
+${data.dos?.replace(/\|/g, '\n')}
+
+⛔ Don'ts:
+${data.donts?.replace(/\|/g, '\n')}`;
+
+      const botMessage = {
+        id: Date.now() + 1,
+        sender: 'bot',
+        text: analysisText,
         timestamp: new Date(),
+        isAnalysis: true,
       };
-      setMessages((prev) => [...prev, aiMessage]);
-    }, 1000);
+
+      setMessages((prev) => [...prev, botMessage]);
+    } catch (error) {
+      console.error('Error details:', error.response || error.message || error);
+      const errorText = error.response?.data?.error || error.message || t('messages.connectionError');
+      const errorMessage = {
+        id: Date.now() + 1,
+        sender: 'bot',
+        text: `Error: ${errorText}`,
+        timestamp: new Date(),
+        isError: true,
+      };
+      setMessages((prev) => [...prev, errorMessage]);
+    } finally {
+      setLoading(false);
+    }
   };
 
-  const handleNewChat = () => {
-    setMessages([INITIAL_MESSAGE]);
+  const toggleVoiceInput = () => {
+    if (!voiceService.isSupported()) {
+      alert('Speech recognition not supported in your browser');
+      return;
+    }
+
+    if (listening) {
+      voiceService.stopListening();
+      setListening(false);
+    } else {
+      voiceService.initialize(currentLanguage);
+      setListening(true);
+
+      voiceService.startListening(
+        (text, isInterim) => {
+          if (!isInterim) {
+            setInput((prev) => prev + (prev ? ' ' : '') + text);
+            setListening(false);
+          }
+        },
+        (error) => {
+          console.error('Voice error:', error);
+          setListening(false);
+        }
+      );
+    }
   };
 
   return (
-    <div className="h-full flex">
-      {/* Chat History Sidebar */}
-      <aside className="w-80 bg-white border-r border-gray-200 flex flex-col">
-        <div className="p-4 border-b">
-          <button
-            onClick={handleNewChat}
-            className="w-full flex items-center justify-center gap-2 px-4 py-3 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-lg hover:from-blue-600 hover:to-teal-600 transition-all font-medium"
-          >
-            <Plus size={18} />
-            New Chat
-          </button>
-        </div>
+    <div className="flex flex-col h-screen bg-gradient-to-br from-primary-50 to-primary-100">
+      {/* Header */}
+      <div className="bg-white border-b border-primary-200 shadow-sm p-6">
+        <h1 className="text-2xl font-bold text-primary-900">{t('chat.title')}</h1>
+        <p className="text-primary-600">{t('chat.description')}</p>
+      </div>
 
-        <div className="flex-1 overflow-auto p-4 space-y-3">
-          <h3 className="text-xs font-semibold text-gray-500 uppercase tracking-wide px-1">Recent Conversations</h3>
-          {MOCK_CHAT_HISTORY.map((chat) => (
+      {/* Messages Area */}
+      <div className="flex-1 overflow-y-auto p-6 space-y-4">
+        {messages.map((message) => (
+          <div
+            key={message.id}
+            className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
+          >
             <div
-              key={chat.id}
-              className="p-3 rounded-lg hover:bg-gray-50 cursor-pointer border border-transparent hover:border-gray-200 transition-all group"
+              className={`max-w-md lg:max-w-2xl p-4 rounded-xl ${
+                message.sender === 'user'
+                  ? 'bg-primary-500 text-white rounded-br-none'
+                  : 'bg-white border border-primary-200 text-primary-900 rounded-bl-none'
+              }`}
             >
-              <div className="flex items-start justify-between gap-2">
-                <div className="flex-1 min-w-0">
-                  <p className="font-medium text-sm text-gray-800 truncate">{chat.title}</p>
-                  <p className="text-xs text-gray-500 truncate mt-1">{chat.preview}</p>
-                  <div className="flex items-center gap-1 mt-2 text-xs text-gray-400">
-                    <Clock size={12} />
-                    <span>{chat.date.toLocaleDateString()}</span>
+              {message.isAnalysis ? (
+                <div className="space-y-4">
+                  <div>
+                    <h3 className="font-bold mb-2">{t('chat.analysis')}</h3>
+                    {message.text.risk_level && (
+                      <div className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <span className="font-semibold">{t('chat.riskLevel')}:</span>
+                          <span
+                            className={`px-3 py-1 rounded-full text-white font-bold ${
+                              message.text.risk_level === 'HIGH'
+                                ? 'bg-red-500'
+                                : message.text.risk_level === 'MEDIUM'
+                                ? 'bg-yellow-500'
+                                : 'bg-green-500'
+                            }`}
+                          >
+                            {message.text.risk_level}
+                          </span>
+                        </div>
+                        {message.text.brief_advice && (
+                          <div>
+                            <p className="font-semibold">{t('chat.advice')}:</p>
+                            <p>{message.text.brief_advice}</p>
+                          </div>
+                        )}
+                        {message.text.food_eat && (
+                          <div>
+                            <p className="font-semibold">{t('chat.foodToEat')}:</p>
+                            <p>{message.text.food_eat}</p>
+                          </div>
+                        )}
+                        {message.text.food_avoid && (
+                          <div>
+                            <p className="font-semibold">{t('chat.foodToAvoid')}:</p>
+                            <p>{message.text.food_avoid}</p>
+                          </div>
+                        )}
+                        {message.text.dos && (
+                          <div>
+                            <p className="font-semibold">{t('chat.doThis')}:</p>
+                            <p>{message.text.dos}</p>
+                          </div>
+                        )}
+                        {message.text.donts && (
+                          <div>
+                            <p className="font-semibold">{t('chat.dontDoThis')}:</p>
+                            <p>{message.text.donts}</p>
+                          </div>
+                        )}
+                      </div>
+                    )}
                   </div>
                 </div>
-                <button className="opacity-0 group-hover:opacity-100 transition-opacity p-1 hover:bg-red-50 rounded">
-                  <Trash2 size={16} className="text-red-500" />
-                </button>
+              ) : message.isError ? (
+                <p className="text-red-500">{message.text}</p>
+              ) : (
+                <p>{message.text}</p>
+              )}
+              <p className="text-xs mt-2 opacity-70">
+                {message.timestamp.toLocaleTimeString()}
+              </p>
+            </div>
+          </div>
+        ))}
+        {loading && (
+          <div className="flex justify-start">
+            <div className="bg-white border border-primary-200 p-4 rounded-xl rounded-bl-none">
+              <div className="flex items-center gap-2">
+                <Loader className="w-5 h-5 text-primary-500 animate-spin" />
+                <p className="text-primary-600">{t('messages.sendingSymptoms')}</p>
               </div>
             </div>
-          ))}
-        </div>
-      </aside>
-
-      {/* Main Chat Area */}
-      <div className="flex-1 flex flex-col">
-        {/* Header */}
-        <header className="bg-white border-b border-gray-200 px-8 py-6 shadow-sm">
-          <h2 className="text-2xl font-bold text-gray-800">Chat with HealthAI</h2>
-          <p className="text-sm text-gray-500 mt-1">Ask me anything about your health concerns</p>
-        </header>
-
-        {/* Messages */}
-        <div className="flex-1 overflow-auto p-6">
-          <div className="max-w-3xl mx-auto space-y-4">
-            {messages.map((message) => (
-              <div
-                key={message.id}
-                className={`flex ${message.sender === 'user' ? 'justify-end' : 'justify-start'}`}
-              >
-                <div
-                  className={`max-w-md rounded-2xl px-4 py-3 ${
-                    message.sender === 'user'
-                      ? 'bg-gradient-to-r from-blue-500 to-teal-500 text-white'
-                      : 'bg-white border border-gray-200 text-gray-800'
-                  }`}
-                >
-                  <p className="text-sm leading-relaxed">{message.content}</p>
-                  <p
-                    className={`text-xs mt-2 ${
-                      message.sender === 'user' ? 'text-blue-100' : 'text-gray-400'
-                    }`}
-                  >
-                    {message.timestamp.toLocaleTimeString([], {
-                      hour: '2-digit',
-                      minute: '2-digit',
-                    })}
-                  </p>
-                </div>
-              </div>
-            ))}
           </div>
-        </div>
+        )}
+        <div ref={messagesEndRef} />
+      </div>
 
-        {/* Input Area */}
-        <div className="bg-white border-t border-gray-200 p-6">
-          <div className="max-w-3xl mx-auto">
-            <div className="flex gap-3">
-              <input
-                ref={inputRef}
-                type="text"
-                value={input}
-                onChange={(e) => setInput(e.target.value)}
-                onKeyPress={(e) => e.key === 'Enter' && handleSend()}
-                placeholder="Describe your symptoms or ask a health question..."
-                className="flex-1 px-4 py-3 border-2 border-gray-300 rounded-lg focus:outline-none focus:border-blue-500 transition-colors"
-              />
-              <VoiceButton onTranscript={handleVoiceTranscript} />
-              <button
-                onClick={handleSend}
-                className="px-6 py-3 bg-gradient-to-r from-blue-500 to-teal-500 text-white rounded-lg hover:from-blue-600 hover:to-teal-600 transition-all flex items-center justify-center"
-              >
-                <Send size={20} />
-              </button>
-            </div>
-            <p className="text-xs text-gray-500 mt-3 text-center">
-              ⚠️ This is an AI assistant. Always consult healthcare professionals for medical advice.
-            </p>
-          </div>
+      {/* Input Area */}
+      <div className="bg-white border-t border-primary-200 shadow-lg p-6">
+        <div className="flex gap-3">
+          <input
+            type="text"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+            placeholder={t('chat.placeholder')}
+            className="flex-1 px-4 py-3 border border-primary-200 rounded-xl focus:ring-2 focus:ring-primary-500 focus:border-transparent outline-none transition"
+          />
+          <button
+            onClick={toggleVoiceInput}
+            className={`p-3 rounded-xl transition ${
+              listening
+                ? 'bg-red-500 text-white'
+                : 'bg-primary-100 text-primary-600 hover:bg-primary-200'
+            }`}
+            title={listening ? t('chat.stopListening') : t('chat.startListening')}
+          >
+            {listening ? <MicOff className="w-6 h-6" /> : <Mic className="w-6 h-6" />}
+          </button>
+          <button
+            onClick={sendMessage}
+            disabled={loading || !input.trim()}
+            className="bg-gradient-to-r from-primary-500 to-primary-600 text-white px-6 py-3 rounded-xl hover:from-primary-600 hover:to-primary-700 disabled:opacity-50 disabled:cursor-not-allowed transition transform hover:scale-105 font-medium flex items-center gap-2"
+          >
+            <Send className="w-5 h-5" />
+            <span>{t('chat.sendMessage')}</span>
+          </button>
         </div>
       </div>
     </div>

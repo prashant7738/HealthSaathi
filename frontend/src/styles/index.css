@@ -1,0 +1,50 @@
+@import 'tailwindcss/base';
+@import 'tailwindcss/components';
+@import 'tailwindcss/utilities';
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  @apply bg-gradient-to-br from-primary-50 to-primary-100;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  @apply bg-primary-50;
+}
+
+::-webkit-scrollbar-thumb {
+  @apply bg-primary-300 rounded-full;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  @apply bg-primary-400;
+}
+
+/* Smooth transitions */
+button, a {
+  @apply transition-all duration-200;
+}
+
+/* Leaflet overrides */
+.leaflet-container {
+  @apply rounded-lg shadow-lg;
+}
+
+.leaflet-popup-content-wrapper {
+  @apply bg-white rounded-lg shadow-xl;
+}
+
+.leaflet-popup-tip {
+  @apply bg-white;
+}
