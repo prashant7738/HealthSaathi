@@ -174,6 +174,7 @@ class TriageView(APIView):
         lng      = serializer.validated_data.get("lng")
         district = serializer.validated_data.get("district", "")
         session_id = serializer.validated_data.get("session_id", "")
+        conversation_id = serializer.validated_data.get("conversation_id")
 
         # 1. AI result
         result = analyze_symptoms(symptoms)
@@ -188,7 +189,7 @@ class TriageView(APIView):
         result["recommended_facility_type"] = recommended_type
 
         # 2. Save to PostgreSQL
-        save_triage_session(
+        saved_session = save_triage_session(
             symptoms        = symptoms,
             risk_level      = result["risk"],
             advice          = result.get("brief_advice", ""),
@@ -206,7 +207,12 @@ class TriageView(APIView):
             user_id         = auth_user.id if auth_user else None,
             user_email      = auth_user.email if auth_user else "",
             session_id      = session_id,
+            conversation_id = conversation_id,
         )
+
+        # Return the conversation_id for frontend to use in future requests
+        if saved_session and saved_session.conversation:
+            result["conversation_id"] = str(saved_session.conversation.id)
 
         # 3. Save to ChromaDB for context awareness
         if auth_user:
@@ -223,49 +229,116 @@ class TriageView(APIView):
 
 class HistoryView(APIView):
     def get(self, request):
-        """Get user's triage history grouped by session"""
+        """Get user's conversations with their sessions grouped together"""
         user = _get_authenticated_user(request)
         
         # Return empty list if not authenticated (no error)
         if not user:
             return Response([], status=status.HTTP_200_OK)
         
-        from .models import TriageSession
+        from .models import TriageSession, Conversation
         
-        # Get all sessions for this user, limit to 20 most recent session IDs
-        sessions = TriageSession.objects.filter(
+        # Get all conversations for this user, ordered by most recent update
+        conversations = Conversation.objects.filter(
             user=user
-        ).order_by('-created_at')[:100]
+        ).order_by('-updated_at')[:20].prefetch_related('sessions')
         
-        # Group by session_id
-        grouped_sessions = {}
-        session_order = []
-        
-        for session in sessions:
-            sid = session.session_id or str(session.created_at)
-            if sid not in grouped_sessions:
-                grouped_sessions[sid] = {
-                    'session_id': sid,
-                    'created_at': session.created_at.isoformat(),
-                    'risk_level': session.risk_level,
-                    'symptoms_preview': session.symptoms[:50] + ('...' if len(session.symptoms) > 50 else ''),
-                    'id': session.id,
-                    'symptoms': session.symptoms,
-                    'district': session.district,
-                    'brief_advice': session.brief_advice,
-                    'detailed_advice': session.detailed_advice,
-                    'food_eat': session.food_eat,
-                    'food_avoid': session.food_avoid,
-                    'dos': session.dos,
-                    'donts': session.donts,
-                    'nepali_advice': session.nepali_advice,
-                }
-                session_order.append(sid)
-        
-        # Return sessions in order (most recent first)
-        result = [grouped_sessions[sid] for sid in session_order[:20]]
+        result = []
+        for conv in conversations:
+            # Get the sessions for this conversation, ordered by creation
+            sessions = conv.sessions.all().order_by('created_at')
+            
+            if not sessions.exists():
+                continue
+            
+            # Use the first session's data as the conversation preview
+            first_session = sessions.first()
+            last_session = sessions.last()
+            
+            conv_data = {
+                'conversation_id': str(conv.id),
+                'session_id': str(conv.id),  # Use conversation ID as session_id for backward compatibility
+                'created_at': conv.created_at.isoformat(),
+                'updated_at': conv.updated_at.isoformat(),
+                'risk_level': first_session.risk_level,
+                'symptoms_preview': first_session.symptoms[:50] + ('...' if len(first_session.symptoms) > 50 else ''),
+                'symptoms': first_session.symptoms,
+                'district': first_session.district,
+                'brief_advice': first_session.brief_advice,
+                'detailed_advice': first_session.detailed_advice,
+                'food_eat': first_session.food_eat,
+                'food_avoid': first_session.food_avoid,
+                'dos': first_session.dos,
+                'donts': first_session.donts,
+                'nepali_advice': first_session.nepali_advice,
+                'session_count': sessions.count(),
+                'sessions': [
+                    {
+                        'id': s.id,
+                        'symptoms': s.symptoms,
+                        'risk_level': s.risk_level,
+                        'brief_advice': s.brief_advice,
+                        'detailed_advice': s.detailed_advice,
+                        'food_eat': s.food_eat,
+                        'food_avoid': s.food_avoid,
+                        'dos': s.dos,
+                        'donts': s.donts,
+                        'nepali_advice': s.nepali_advice,
+                        'created_at': s.created_at.isoformat(),
+                    }
+                    for s in sessions
+                ]
+            }
+            result.append(conv_data)
         
         return Response(result, status=status.HTTP_200_OK)
+    
+    def delete(self, request):
+        """Delete a conversation and all its sessions"""
+        user = _get_authenticated_user(request)
+        
+        if not user:
+            return Response(
+                {"error": "Not authenticated"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        from .models import Conversation
+        
+        conversation_id = request.query_params.get('session_id') or request.data.get('session_id') or request.data.get('conversation_id')
+        
+        if not conversation_id:
+            return Response(
+                {"error": "conversation_id or session_id required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            # Get the conversation (use session_id as fallback for conversation_id)
+            conv = Conversation.objects.filter(
+                user=user,
+                id=conversation_id
+            ).first()
+            
+            if not conv:
+                return Response(
+                    {"error": "Conversation not found"},
+                    status=status.HTTP_404_NOT_FOUND
+                )
+            
+            # Delete the conversation (cascades to all sessions)
+            conv.delete()
+            
+            return Response(
+                {"message": "Conversation deleted successfully"},
+                status=status.HTTP_200_OK
+            )
+        except Exception as e:
+            print(f"❌ Delete error: {e}")
+            return Response(
+                {"error": str(e)},
+                status=status.HTTP_500_INTERNAL_SERVER_ERROR
+            )
 
 
 class StatsView(APIView):

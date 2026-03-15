@@ -28,6 +28,13 @@ class TriageRequestSerializer(serializers.Serializer):
         allow_blank=True,
         default=''
     )
+    conversation_id = serializers.CharField(
+        max_length=100,
+        required=False,
+        allow_blank=True,
+        allow_null=True,
+        default=None
+    )
 
 
 class TriageSessionSerializer(serializers.ModelSerializer):

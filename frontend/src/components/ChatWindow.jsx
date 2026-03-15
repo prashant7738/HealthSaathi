@@ -10,7 +10,7 @@ const RISK_TO_FACILITY_TYPE = {
   LOW:    'clinic',
 };
 
-export default function ChatWindow() {
+export default function ChatWindow({ onConsultationSubmitted, conversationId, onConversationIdChange }) {
   const {
     t, location, messages, addMessage,
     loading, setLoading,
@@ -18,11 +18,16 @@ export default function ChatWindow() {
   } = useApp();
 
   const [input, setInput]                 = useState('');
+  const [localConversationId, setLocalConversationId] = useState(conversationId);
   const bottomRef                         = useRef(null);
   const abortControllerRef               = useRef(null);
   const textareaRef                       = useRef(null);
 
   useEffect(() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); }, [messages, loading]);
+
+  useEffect(() => {
+    setLocalConversationId(conversationId);
+  }, [conversationId]);
 
   useEffect(() => {
     if (textareaRef.current) {
@@ -41,8 +46,18 @@ export default function ChatWindow() {
     try {
       const result = await submitTriage(
         text, location?.lat ?? null, location?.lng ?? null,
-        abortControllerRef.current.signal
+        abortControllerRef.current.signal,
+        localConversationId
       );
+      
+      // Update conversation ID if returned from backend (for new conversations)
+      if (result.conversation_id && !localConversationId) {
+        setLocalConversationId(result.conversation_id);
+        if (onConversationIdChange) {
+          onConversationIdChange(result.conversation_id);
+        }
+      }
+      
       const recommendedType = RISK_TO_FACILITY_TYPE[result?.risk] || 'clinic';
       let facilities = [];
       if (location?.lat != null && location?.lng != null) {
@@ -59,6 +74,11 @@ export default function ChatWindow() {
           recommended_facilities: Array.isArray(facilities) ? facilities : [],
         },
       });
+      
+      // Refresh history after successful consultation submission
+      if (onConsultationSubmitted) {
+        onConsultationSubmitted();
+      }
     } catch (error) {
       addMessage({
         role: 'ai',
