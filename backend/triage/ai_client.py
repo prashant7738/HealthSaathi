@@ -1,5 +1,9 @@
 import json
 import os
+import random
+import threading
+import time
+from collections import deque
 import requests
 from dotenv import load_dotenv
 from .chromadb import ChromaDBManager
@@ -66,6 +70,42 @@ EXAMPLE — Nepali LOW risk (मलाई हल्का रुघा लाग
 {"risk":"LOW","brief_advice":"तपाईंका लक्षणहरू हल्का छन् र घरमै उपचार गर्न सकिन्छ। आराम गर्नुहोस् र प्रशस्त तरल पदार्थ पिउनुहोस्।","detailed_advice":"हल्का रुघाखोकी सामान्यतया ३-५ दिनमा ठीक हुन्छ। तातो पानी र अदुवा चिया पिउनुहोस्। राम्रोसँग आराम गर्नुहोस्। दुई दिनमा सुधार नभए स्वास्थ्य चौकी जानुहोस्।","food_eat":"तातो सूप, अदुवा चिया, मह, भात, ताजा फलफूल","food_avoid":"चिसो पेय, धेरै पिरो खाना, तेलिलो खाजा","dos":"तातो पानी पिउनुहोस्|आराम गर्नुहोस्|न्यानो राख्नुहोस्|नियमित खाना खानुहोस्","donts":"लामो समय लक्षण बेवास्ता नगर्नुहोस्|अति परिश्रम नगर्नुहोस्","nepali_advice":"घरमा आराम गर्नुहोस्"}
 """
 
+AZURE_OPENAI_ENDPOINT = os.getenv(
+    "AZURE_OPENAI_ENDPOINT",
+    "https://nexalaris-tech.openai.azure.com/openai/deployments/gpt-5.4/chat/completions?api-version=2024-10-21",
+)
+MAX_REQUESTS_PER_MINUTE = 10
+RATE_LIMIT_WINDOW_SECONDS = 60
+MAX_429_RETRIES = 4
+BASE_BACKOFF_SECONDS = 1.0
+REQUEST_TIMEOUT_SECONDS = 45
+
+
+class FixedWindowRateLimiter:
+    def __init__(self, limit: int, window_seconds: int):
+        self.limit = limit
+        self.window_seconds = window_seconds
+        self.timestamps = deque()
+        self.lock = threading.Lock()
+
+    def try_acquire(self) -> bool:
+        now = time.time()
+        with self.lock:
+            while self.timestamps and now - self.timestamps[0] >= self.window_seconds:
+                self.timestamps.popleft()
+
+            if len(self.timestamps) >= self.limit:
+                return False
+
+            self.timestamps.append(now)
+            return True
+
+
+rate_limiter = FixedWindowRateLimiter(
+    limit=MAX_REQUESTS_PER_MINUTE,
+    window_seconds=RATE_LIMIT_WINDOW_SECONDS,
+)
+
 
 def analyze_symptoms(symptoms: str) -> dict:
     # ── STEP 1: CHECK CHROMADB CACHE ─────────────
@@ -82,21 +122,29 @@ def analyze_symptoms(symptoms: str) -> dict:
         except json.JSONDecodeError:
             return {"error": "Invalid cached response", "original": cached_response}
 
-    # ── STEP 2: Try Groq ─────────────────────────
-    result = _try_groq(symptoms)
+    # ── STEP 2: Try Azure OpenAI (GPT-5.4) ─────
+    result, rate_limited = _try_azure_openai(symptoms)
     if result:
-        ChromaDBManager.save_to_cache(symptoms, result, metadata={"llm_source": "groq"})
-        result["_source"] = "groq"
+        ChromaDBManager.save_to_cache(symptoms, result, metadata={"llm_source": "azure_gpt_5_4"})
+        result["_source"] = "azure_gpt_5_4"
         result["_cache_hit"] = False
         return result
 
-    # ── STEP 3: Fallback to Gemini ──────────────
-    result = _try_gemini(symptoms)
-    if result:
-        ChromaDBManager.save_to_cache(symptoms, result, metadata={"llm_source": "gemini"})
-        result["_source"] = "gemini"
-        result["_cache_hit"] = False
-        return result
+    # ── STEP 3: If GPT is rate-limited, fallback to Gemini then Groq ─────
+    if rate_limited:
+        result = _try_gemini(symptoms)
+        if result:
+            ChromaDBManager.save_to_cache(symptoms, result, metadata={"llm_source": "gemini"})
+            result["_source"] = "gemini"
+            result["_cache_hit"] = False
+            return result
+
+        result = _try_groq(symptoms)
+        if result:
+            ChromaDBManager.save_to_cache(symptoms, result, metadata={"llm_source": "groq"})
+            result["_source"] = "groq"
+            result["_cache_hit"] = False
+            return result
 
     # ── STEP 4: Final fallback ─────────────────
     fallback = _fallback_response()
@@ -106,12 +154,153 @@ def analyze_symptoms(symptoms: str) -> dict:
     return fallback
 
 
+def _try_azure_openai(symptoms: str) -> tuple[dict | None, bool]:
+    api_key = os.getenv("AZURE_OPENAI_API_KEY")
+    if not api_key:
+        print("❌ Azure OpenAI API key missing: set AZURE_OPENAI_API_KEY")
+        return None, False
+
+    headers = {
+        "api-key": api_key,
+        "Content-Type": "application/json",
+    }
+    payload = {
+        "messages": [
+            {
+                "role": "system",
+                "content": SYSTEM_PROMPT,
+            },
+            {
+                "role": "user",
+                "content": f"Detect the language of these symptoms and respond in the same language. Patient symptoms: {symptoms}",
+            },
+        ],
+        "max_completion_tokens": 1000,
+        "temperature": 0.7,
+    }
+
+    for attempt in range(MAX_429_RETRIES + 1):
+        try:
+            if not rate_limiter.try_acquire():
+                print("⚠️ Local GPT rate limit exceeded (10 RPM), switching to fallback provider")
+                return None, True
+
+            response = requests.post(
+                AZURE_OPENAI_ENDPOINT,
+                headers=headers,
+                json=payload,
+                timeout=REQUEST_TIMEOUT_SECONDS,
+            )
+
+            if response.status_code == 429:
+                if attempt == MAX_429_RETRIES:
+                    print("❌ Azure OpenAI rate limit hit after retries")
+                    return None, True
+
+                backoff = (BASE_BACKOFF_SECONDS * (2 ** attempt)) + random.uniform(0.0, 0.5)
+                print(f"⚠️ Azure OpenAI 429 received, retrying in {backoff:.2f}s")
+                time.sleep(backoff)
+                continue
+
+            if response.status_code != 200:
+                print(f"❌ Azure OpenAI non-200 status: {response.status_code} {response.text[:300]}")
+                return None, False
+
+            data = response.json()
+            if not _is_output_safe(data):
+                print("❌ Azure OpenAI response blocked by content filter")
+                return None, False
+
+            text = data.get("choices", [{}])[0].get("message", {}).get("content", "").strip()
+            if not text:
+                print("❌ Azure OpenAI returned empty content")
+                return None, False
+
+            print(f"✅ Azure GPT-5.4 response: {text[:100]}...")
+            return _parse_response(text, "Azure GPT-5.4"), False
+
+        except requests.RequestException as e:
+            print(f"❌ Azure OpenAI request error: {e}")
+            return None, False
+        except ValueError as e:
+            print(f"❌ Azure OpenAI response parse error: {e}")
+            return None, False
+
+    return None, False
+
+
+def _is_output_safe(response_data: dict) -> bool:
+    choices = response_data.get("choices") or []
+    if not choices:
+        return False
+
+    first_choice = choices[0]
+    if first_choice.get("finish_reason") == "content_filter":
+        return False
+
+    content_filter_results = first_choice.get("content_filter_results") or {}
+    for details in content_filter_results.values():
+        if isinstance(details, dict) and details.get("filtered"):
+            return False
+
+    prompt_filters = response_data.get("prompt_filter_results") or []
+    for prompt_filter in prompt_filters:
+        prompt_results = prompt_filter.get("content_filter_results") or {}
+        for details in prompt_results.values():
+            if isinstance(details, dict) and details.get("filtered"):
+                return False
+
+    return True
+
+
+def _try_gemini(symptoms: str) -> dict | None:
+    try:
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return None
+
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={api_key}"
+
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": f"{SYSTEM_PROMPT}\n\nDetect the language of these symptoms and respond in the same language. Patient symptoms: {symptoms}"
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
+                "temperature": 0.2,
+                "maxOutputTokens": 1024,
+            }
+        }
+
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=30
+        )
+        response.raise_for_status()
+
+        data = response.json()
+        text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        print(f"✅ Gemini response: {text[:100]}...")
+
+        return _parse_response(text, "Gemini")
+
+    except Exception as e:
+        print(f"❌ Gemini error: {e}")
+        return None
+
+
 def _try_groq(symptoms: str) -> dict | None:
     try:
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             return None
-        
+
         headers = {
             "Authorization": f"Bearer {api_key}",
             "Content-Type": "application/json"
@@ -131,7 +320,7 @@ def _try_groq(symptoms: str) -> dict | None:
             "temperature": 0.2,
             "max_tokens": 1024,
         }
-        
+
         response = requests.post(
             "https://api.groq.com/openai/v1/chat/completions",
             headers=headers,
@@ -139,7 +328,7 @@ def _try_groq(symptoms: str) -> dict | None:
             timeout=30
         )
         response.raise_for_status()
-        
+
         data = response.json()
         text = data["choices"][0]["message"]["content"].strip()
         print(f"✅ Groq response: {text[:100]}...")
@@ -148,48 +337,6 @@ def _try_groq(symptoms: str) -> dict | None:
 
     except Exception as e:
         print(f"❌ Groq error: {e}")
-        return None
-
-
-def _try_gemini(symptoms: str) -> dict | None:
-    try:
-        api_key = os.getenv("GEMINI_API_KEY")
-        if not api_key:
-            return None
-        
-        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={api_key}"
-        
-        payload = {
-            "contents": [
-                {
-                    "parts": [
-                        {
-                            "text": f"{SYSTEM_PROMPT}\n\nDetect the language of these symptoms and respond in the same language. Patient symptoms: {symptoms}"
-                        }
-                    ]
-                }
-            ],
-            "generationConfig": {
-                "temperature": 0.2,
-                "maxOutputTokens": 1024,
-            }
-        }
-        
-        response = requests.post(
-            url,
-            json=payload,
-            timeout=30
-        )
-        response.raise_for_status()
-        
-        data = response.json()
-        text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
-        print(f"✅ Gemini response: {text[:100]}...")
-
-        return _parse_response(text, "Gemini")
-
-    except Exception as e:
-        print(f"❌ Gemini error: {e}")
         return None
 
 
