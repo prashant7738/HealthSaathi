@@ -26,7 +26,7 @@ INSTALLED_APPS = [
 ]
 
 MIDDLEWARE = [
-    "corsheaders.middleware.CorsMiddleware",  # ← must be first
+    "corsheaders.middleware.CorsMiddleware", 
     "django.middleware.security.SecurityMiddleware",
     "django.contrib.sessions.middleware.SessionMiddleware",
     "django.middleware.common.CommonMiddleware",
@@ -59,9 +59,9 @@ WSGI_APPLICATION = "nepalcare.wsgi.application"
 DATABASES = {
     "default": {
         "ENGINE":   "django.db.backends.postgresql",
-        "NAME":     os.getenv("DB_NAME", "HealthSaathi"),
+        "NAME":     os.getenv("DB_NAME", "healthsathi"),
         "USER":     os.getenv("DB_USER", "postgres"),
-        "PASSWORD": os.getenv("DB_PASSWORD", "qwerty"),
+        "PASSWORD": os.getenv("DB_PASSWORD", "sushil123@#"),
         "HOST":     os.getenv("DB_HOST", "localhost"),
         "PORT":     os.getenv("DB_PORT", "5432"),
     }
@@ -74,11 +74,7 @@ USE_TZ = True
 
 STATIC_URL = "static/"
 DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
-
-# ── CORS ─────────────────────────────────────────────
-CORS_ALLOW_ALL_ORIGINS = True  # fine for hackathon
-
-# ── DRF ──────────────────────────────────────────────
+CORS_ALLOW_ALL_ORIGINS = True  
 REST_FRAMEWORK = {
     "DEFAULT_PERMISSION_CLASSES": [
         "rest_framework.permissions.AllowAny",
