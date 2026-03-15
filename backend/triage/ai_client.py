@@ -2,6 +2,7 @@ import json
 import os
 import requests
 from dotenv import load_dotenv
+from .chromadb import ChromaDBManager
 
 load_dotenv()
 
@@ -67,18 +68,31 @@ EXAMPLE — Nepali LOW risk (मलाई हल्का रुघा लाग
 
 
 def analyze_symptoms(symptoms: str) -> dict:
-    # ── Try Groq first ─────────────────────────────
+    # ── STEP 1: CHECK CHROMADB CACHE ─────────────
+    cache_result = ChromaDBManager.check_cache(symptoms, threshold=0.15)
+    if cache_result and cache_result["cached"]:
+        cached_response = cache_result["response"]
+        try:
+            return json.loads(cached_response)
+        except json.JSONDecodeError:
+            return {"error": "Invalid cached response", "original": cached_response}
+
+    # ── STEP 2: Try Groq ─────────────────────────
     result = _try_groq(symptoms)
     if result:
+        ChromaDBManager.save_to_cache(symptoms, result)
         return result
 
-    # ── Fallback to Gemini ─────────────────────────
+    # ── STEP 3: Fallback to Gemini ──────────────
     result = _try_gemini(symptoms)
     if result:
+        ChromaDBManager.save_to_cache(symptoms, result)
         return result
 
-    # ── Final fallback ─────────────────────────────
-    return _fallback_response()
+    # ── STEP 4: Final fallback ─────────────────
+    fallback = _fallback_response()
+    ChromaDBManager.save_to_cache(symptoms, fallback)
+    return fallback
 
 
 def _try_groq(symptoms: str) -> dict | None:
