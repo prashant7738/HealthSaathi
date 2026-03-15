@@ -1,5 +1,6 @@
 from rest_framework import serializers
 from django.contrib.auth.models import User
+from .models import TriageSession
 
 
 class TriageRequestSerializer(serializers.Serializer):
@@ -27,6 +28,18 @@ class TriageRequestSerializer(serializers.Serializer):
         allow_blank=True,
         default=''
     )
+
+
+class TriageSessionSerializer(serializers.ModelSerializer):
+    """Serializer for TriageSession model - used for history endpoints"""
+    class Meta:
+        model = TriageSession
+        fields = [
+            'id', 'session_id', 'symptoms', 'risk_level', 'district', 
+            'created_at', 'brief_advice', 'detailed_advice', 'food_eat', 
+            'food_avoid', 'dos', 'donts', 'nepali_advice'
+        ]
+        read_only_fields = fields
 
 
 class RegisterSerializer(serializers.Serializer):

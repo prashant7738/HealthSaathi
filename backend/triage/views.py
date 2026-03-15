@@ -10,7 +10,8 @@ from .serializers import (
     TriageRequestSerializer,
     RegisterSerializer,
     LoginSerializer,
-    UserSerializer
+    UserSerializer,
+    TriageSessionSerializer
 )
 from .ai_client import analyze_symptoms
 from .database_client import save_triage_session, get_real_stats
@@ -164,21 +165,22 @@ class HistoryView(APIView):
     def get(self, request):
         """Get user's triage history grouped by session"""
         user = _get_authenticated_user(request)
+        
+        # Return empty list if not authenticated (no error)
         if not user:
-            return Response(
-                {"error": "Authentication required"},
-                status=status.HTTP_401_UNAUTHORIZED
-            )
+            return Response([], status=status.HTTP_200_OK)
         
         from .models import TriageSession
         
-        # Get all sessions for this user grouped by session_id
+        # Get all sessions for this user, limit to 20 most recent session IDs
         sessions = TriageSession.objects.filter(
             user=user
-        ).order_by('-created_at')
+        ).order_by('-created_at')[:100]
         
         # Group by session_id
         grouped_sessions = {}
+        session_order = []
+        
         for session in sessions:
             sid = session.session_id or str(session.created_at)
             if sid not in grouped_sessions:
@@ -186,17 +188,24 @@ class HistoryView(APIView):
                     'session_id': sid,
                     'created_at': session.created_at.isoformat(),
                     'risk_level': session.risk_level,
+                    'symptoms_preview': session.symptoms[:50] + ('...' if len(session.symptoms) > 50 else ''),
+                    'id': session.id,
+                    'symptoms': session.symptoms,
                     'district': session.district,
-                    'items': []
+                    'brief_advice': session.brief_advice,
+                    'detailed_advice': session.detailed_advice,
+                    'food_eat': session.food_eat,
+                    'food_avoid': session.food_avoid,
+                    'dos': session.dos,
+                    'donts': session.donts,
+                    'nepali_advice': session.nepali_advice,
                 }
-            grouped_sessions[sid]['items'].append({
-                'id': session.id,
-                'risk_level': session.risk_level,
-                'district': session.district,
-                'created_at': session.created_at.isoformat(),
-            })
+                session_order.append(sid)
         
-        return Response(list(grouped_sessions.values()), status=status.HTTP_200_OK)
+        # Return sessions in order (most recent first)
+        result = [grouped_sessions[sid] for sid in session_order[:20]]
+        
+        return Response(result, status=status.HTTP_200_OK)
 
 
 class StatsView(APIView):
