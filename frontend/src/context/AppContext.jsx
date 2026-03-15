@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useCallback } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect } from 'react';
 import translations from '../i18n/translations';
 
 const AppContext = createContext(null);
@@ -12,8 +12,32 @@ export function AppProvider({ children }) {
   const [loading, setLoading] = useState(false);
   const [recommendedFacilityType, setRecommendedFacilityType] = useState(null);
   const [recommendedFacilities, setRecommendedFacilities] = useState([]);
+  
+  // Auth state
+  const [user, setUser] = useState(null);
+  const [token, setToken] = useState(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
 
   const t = translations[lang];
+
+  // Initialize auth from localStorage on mount
+  useEffect(() => {
+    const storedToken = localStorage.getItem('nc_token');
+    const storedUser = localStorage.getItem('nc_user');
+    
+    if (storedToken && storedUser) {
+      try {
+        const userData = JSON.parse(storedUser);
+        setToken(storedToken);
+        setUser(userData);
+        setIsAuthenticated(true);
+      } catch (err) {
+        console.error('Failed to restore auth from localStorage:', err);
+        localStorage.removeItem('nc_token');
+        localStorage.removeItem('nc_user');
+      }
+    }
+  }, []);
 
   const toggleLang = useCallback(() => {
     setLang((prev) => (prev === 'en' ? 'np' : 'en'));
@@ -24,6 +48,23 @@ export function AppProvider({ children }) {
   }, []);
 
   const clearMessages = useCallback(() => setMessages([]), []);
+
+  // Auth functions
+  const login = useCallback((userData, authToken) => {
+    setUser(userData);
+    setToken(authToken);
+    setIsAuthenticated(true);
+    localStorage.setItem('nc_token', authToken);
+    localStorage.setItem('nc_user', JSON.stringify(userData));
+  }, []);
+
+  const logout = useCallback(() => {
+    setUser(null);
+    setToken(null);
+    setIsAuthenticated(false);
+    localStorage.removeItem('nc_token');
+    localStorage.removeItem('nc_user');
+  }, []);
 
   return (
     <AppContext.Provider
@@ -38,6 +79,8 @@ export function AppProvider({ children }) {
         setRecommendedFacilityType,
         recommendedFacilities,
         setRecommendedFacilities,
+        user, token, isAuthenticated,
+        login, logout,
       }}
     >
       {children}

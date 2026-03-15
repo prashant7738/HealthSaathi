@@ -1,14 +1,34 @@
 import React from 'react';
-import { BrowserRouter, Routes, Route, NavLink, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { AppProvider } from './context/AppContext';
 import { useApp } from './context/AppContext';
 import LanguageToggle from './components/LanguageToggle';
 import ChatPage from './pages/ChatPage';
 import MapPage from './pages/MapPage';
 import DashboardPage from './pages/DashboardPage';
+import LoginPage from './pages/LoginPage';
+import RegisterPage from './pages/RegisterPage';
+
+// Protected route component for authenticated pages
+function ProtectedRoute({ children }) {
+  const { isAuthenticated } = useApp();
+  
+  if (!isAuthenticated) {
+    return <Navigate to="/login" replace />;
+  }
+  
+  return children;
+}
 
 function Header() {
-  const { t } = useApp();
+  const { t, isAuthenticated, user, logout } = useApp();
+  const navigate = useNavigate();
+
+  const handleLogout = () => {
+    logout();
+    navigate('/login');
+  };
+
   return (
     <header className="bg-gradient-to-r from-nepal-blue to-primary-700 text-white px-4 py-3 flex items-center justify-between shadow-md flex-shrink-0">
       <div className="flex items-center gap-2">
@@ -22,13 +42,32 @@ function Header() {
           <p className="text-xs text-white/70 leading-tight">{t.tagline}</p>
         </div>
       </div>
-      <LanguageToggle />
+      <div className="flex items-center gap-3">
+        {isAuthenticated && user && (
+          <div className="flex items-center gap-2">
+            <span className="text-sm">{user.name ? user.name.split(' ')[0] : user.email}</span>
+            <button
+              onClick={handleLogout}
+              className="text-white hover:bg-white/20 px-2.5 py-1 rounded-md text-xs font-medium transition-colors"
+            >
+              Logout
+            </button>
+          </div>
+        )}
+        {!isAuthenticated && <LanguageToggle />}
+      </div>
     </header>
   );
 }
 
 function BottomNav() {
-  const { t } = useApp();
+  const { t, isAuthenticated } = useApp();
+  
+  // Don't show bottom nav on login/register pages
+  if (!isAuthenticated) {
+    return null;
+  }
+
   const tabs = [
     { to: '/chat', label: t.nav.chat, icon: (
       <svg xmlns="http://www.w3.org/2000/svg" className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -70,15 +109,50 @@ function BottomNav() {
 }
 
 function AppShell() {
+  const { isAuthenticated } = useApp();
+
+  // For login/register pages, don't show header/nav
+  if (!isAuthenticated) {
+    return (
+      <Routes>
+        <Route path="/login" element={<LoginPage />} />
+        <Route path="/register" element={<RegisterPage />} />
+        <Route path="*" element={<Navigate to="/login" replace />} />
+      </Routes>
+    );
+  }
+
   return (
     <div className="flex flex-col h-screen max-w-lg mx-auto bg-gray-50 shadow-xl">
       <Header />
       <main className="flex-1 overflow-hidden">
         <Routes>
           <Route path="/" element={<Navigate to="/chat" replace />} />
-          <Route path="/chat" element={<ChatPage />} />
-          <Route path="/map" element={<MapPage />} />
-          <Route path="/dashboard" element={<DashboardPage />} />
+          <Route
+            path="/chat"
+            element={
+              <ProtectedRoute>
+                <ChatPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/map"
+            element={
+              <ProtectedRoute>
+                <MapPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route path="*" element={<Navigate to="/chat" replace />} />
         </Routes>
       </main>
       <BottomNav />

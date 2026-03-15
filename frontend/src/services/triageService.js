@@ -1,6 +1,46 @@
 import apiClient from './api';
 
 /**
+ * User login
+ * @param {string} email - User email
+ * @param {string} password - User password
+ * @returns {Promise<Object>} Response with user data and token
+ */
+export async function login(email, password) {
+  try {
+    const payload = { email, password };
+    const response = await apiClient.post('/auth/login/', payload);
+    return response.data;
+  } catch (error) {
+    console.error('login error:', error);
+    throw error;
+  }
+}
+
+/**
+ * User registration
+ * @param {string} name - User full name
+ * @param {string} email - User email
+ * @param {string} password - User password
+ * @returns {Promise<Object>} Response with user data and token
+ */
+export async function register(name, email, password) {
+  try {
+    const payload = { 
+      name,
+      email, 
+      password,
+      confirm_password: password
+    };
+    const response = await apiClient.post('/auth/register/', payload);
+    return response.data;
+  } catch (error) {
+    console.error('register error:', error);
+    throw error;
+  }
+}
+
+/**
  * Submit triage symptoms to backend AI for analysis
  * @param {string} symptoms - Patient's symptom description
  * @param {number} lat - Latitude (optional)
