@@ -1,7 +1,23 @@
 from django.db import models
 from django.contrib.auth.models import User
 import hashlib
+import uuid
 from .user_profile import UserProfile
+
+
+class Conversation(models.Model):
+    """Represents a conversation thread containing multiple triage sessions"""
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='conversations')
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+    title = models.CharField(max_length=255, blank=True, default='')  # Auto-generated from first symptom
+    
+    class Meta:
+        ordering = ['-updated_at']
+    
+    def __str__(self):
+        return f"Conversation - {self.created_at}"
 
 
 class TriageSession(models.Model):
@@ -30,6 +46,7 @@ class TriageSession(models.Model):
     user = models.ForeignKey(User, on_delete=models.CASCADE, null=True, blank=True, related_name='triage_sessions')
     user_email = models.EmailField(blank=True, default='')
     session_id = models.CharField(max_length=100, blank=True, default='')
+    conversation = models.ForeignKey(Conversation, on_delete=models.CASCADE, null=True, blank=True, related_name='sessions')
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
 

@@ -2,6 +2,7 @@ import React, { useEffect, useState } from 'react';
 import { useApp } from '../context/AppContext';
 import ChatWindow from '../components/ChatWindow';
 import { getCurrentLocation, getPlaceAndCity } from '../services/locationService';
+import { deleteConsultation } from '../services/triageService';
 import apiClient from '../services/api';
 
 export default function ChatPage() {
@@ -18,6 +19,9 @@ export default function ChatPage() {
   const [placeData, setPlaceData] = useState({ place: null, city: null, loading: false });
   const [isHistoryCollapsed, setIsHistoryCollapsed] = useState(false);
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState(false);
+  const [selectedSession, setSelectedSession] = useState(null);
+  const [sessionKey, setSessionKey] = useState(0);
+  const [conversationId, setConversationId] = useState(null);
 
   const handleGetLocation = () => {
     setLocationLoading(true);
@@ -27,39 +31,84 @@ export default function ChatPage() {
       .catch(err => { setLocationError(err.message); setLocationLoading(false); });
   };
 
+  const handleNewConsultation = () => {
+    clearMessages();
+    setRecommendedFacilityType(null);
+    setRecommendedFacilities([]);
+    setSelectedSession(null);
+    setConversationId(null);
+    setSessionKey(prev => prev + 1);
+    fetchChatHistory();
+  };
+
+  const handleDeleteConsultation = async (session, e) => {
+    e.stopPropagation();
+    if (!window.confirm('Are you sure you want to delete this consultation?')) return;
+    try {
+      await deleteConsultation(session.session_id || session.conversation_id);
+      fetchChatHistory();
+      if (selectedSession?.session_id === session.session_id || selectedSession?.conversation_id === session.conversation_id) {
+        handleNewConsultation();
+      }
+    } catch (error) {
+      console.error('Failed to delete consultation:', error);
+      alert('Failed to delete consultation');
+    }
+  };
+
   const handleLoadConsultation = (session) => {
     // Clear current chat
     clearMessages();
     setRecommendedFacilityType(null);
     setRecommendedFacilities([]);
+    setSelectedSession(session);
+    setConversationId(session.conversation_id || session.session_id);
+    setSessionKey(prev => prev + 1);
 
-    // Add the symptoms as a user message
-    addMessage({ sender: 'user', text: session.symptoms });
+    // Load all sessions from the conversation
+    if (session.sessions && Array.isArray(session.sessions)) {
+      session.sessions.forEach((s) => {
+        // Add the symptoms as a user message
+        addMessage({ role: 'user', text: s.symptoms });
 
-    // Add the AI response with triageResult for RiskCard formatting
-    addMessage({
-      sender: 'ai',
-      text: 'Here is your consultation result:',
-      triageResult: {
-        risk: session.risk_level,
-        brief_advice: session.brief_advice,
-        detailed_advice: session.detailed_advice,
-        food_eat: session.food_eat,
-        food_avoid: session.food_avoid,
-        dos: session.dos,
-        donts: session.donts,
-        nepali_advice: session.nepali_advice,
-        recommended_facilities: [],
-        recommended_facility_type: session.district,
-      }
-    });
-  };
-
-  const handleNewConsultation = () => {
-    clearMessages();
-    setRecommendedFacilityType(null);
-    setRecommendedFacilities([]);
-    fetchChatHistory(); // Refresh history to show the saved consultation
+        // Add the AI response with triageResult for RiskCard formatting
+        addMessage({
+          role: 'ai',
+          text: 'Here is your consultation result:',
+          triageResult: {
+            risk: s.risk_level,
+            brief_advice: s.brief_advice,
+            detailed_advice: s.detailed_advice,
+            food_eat: s.food_eat,
+            food_avoid: s.food_avoid,
+            dos: s.dos,
+            donts: s.donts,
+            nepali_advice: s.nepali_advice,
+            recommended_facilities: [],
+            recommended_facility_type: session.district,
+          }
+        });
+      });
+    } else {
+      // Fallback for single session (backward compatibility)
+      addMessage({ role: 'user', text: session.symptoms });
+      addMessage({
+        role: 'ai',
+        text: 'Here is your consultation result:',
+        triageResult: {
+          risk: session.risk_level,
+          brief_advice: session.brief_advice,
+          detailed_advice: session.detailed_advice,
+          food_eat: session.food_eat,
+          food_avoid: session.food_avoid,
+          dos: session.dos,
+          donts: session.donts,
+          nepali_advice: session.nepali_advice,
+          recommended_facilities: [],
+          recommended_facility_type: session.district,
+        }
+      });
+    }
   };
 
   useEffect(() => {
@@ -139,12 +188,14 @@ export default function ChatPage() {
                     <p className="text-xs text-gray-500 text-center py-4">No consultations yet</p>
                   ) : (
                     chatHistory.slice(0, 10).map((session, idx) => (
-                      <button
+                      <div
                         key={idx}
-                        onClick={() => handleLoadConsultation(session)}
-                        className="w-full text-left px-3 py-2 rounded-lg hover:bg-gray-100 transition-all group text-xs"
+                        className="relative flex items-stretch rounded-lg hover:bg-gray-100 transition-all group text-xs"
                       >
-                        <div className="flex items-center gap-2 min-w-0">
+                        <button
+                          onClick={() => handleLoadConsultation(session)}
+                          className="flex-1 text-left px-3 py-2 flex items-center gap-2 min-w-0"
+                        >
                           <span className={`text-sm flex-shrink-0 ${
                             session.risk_level === 'HIGH' ? '🔴' :
                             session.risk_level === 'MEDIUM' ? '🟡' :
@@ -154,12 +205,26 @@ export default function ChatPage() {
                             <p className="text-gray-700 font-medium truncate group-hover:text-teal-600">
                               {session.symptoms.substring(0, 40)}{session.symptoms.length > 40 ? '...' : ''}
                             </p>
-                            <p className="text-gray-500 text-xs mt-0.5">
-                              {new Date(session.created_at).toLocaleDateString()}
+                            <p className="text-gray-500 text-xs mt-0.5 flex items-center gap-1">
+                              <span>{new Date(session.created_at).toLocaleDateString()}</span>
+                              {session.session_count > 1 && (
+                                <span className="bg-teal-100 text-teal-700 px-1.5 rounded text-xs font-semibold">
+                                  {session.session_count} symptoms
+                                </span>
+                              )}
                             </p>
                           </div>
-                        </div>
-                      </button>
+                        </button>
+                        <button
+                          onClick={(e) => handleDeleteConsultation(session, e)}
+                          className="px-3 py-2 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-r transition-all flex-shrink-0 opacity-0 group-hover:opacity-100"
+                          title="Delete consultation"
+                        >
+                          <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                          </svg>
+                        </button>
+                      </div>
                     ))
                   )}
                 </div>
@@ -250,7 +315,7 @@ export default function ChatPage() {
 
         {/* Chat content */}
         <div className="flex-1 overflow-hidden bg-gray-100">
-          <ChatWindow />
+          <ChatWindow key={sessionKey} conversationId={conversationId} onConversationIdChange={setConversationId} onConsultationSubmitted={fetchChatHistory} />
         </div>
       </div>
     </div>

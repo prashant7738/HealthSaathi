@@ -1,5 +1,5 @@
 """Database client for PostgreSQL backend instead of Supabase."""
-from .models import TriageSession
+from .models import TriageSession, Conversation
 
 
 def save_triage_session(
@@ -20,9 +20,22 @@ def save_triage_session(
     user_id: int = None,
     user_email: str = "",
     session_id: str = "",
+    conversation_id: str = None,
 ):
     """Save a triage session to PostgreSQL database."""
     try:
+        conversation = None
+        
+        # If conversation_id is provided, get or create the conversation
+        if conversation_id and user_id:
+            conversation, _ = Conversation.objects.get_or_create(
+                id=conversation_id,
+                defaults={'user_id': user_id}
+            )
+        # If no conversation_id, create a new conversation for this session
+        elif user_id:
+            conversation = Conversation.objects.create(user_id=user_id)
+        
         session = TriageSession.objects.create(
             symptoms=symptoms,
             risk_level=risk_level,
@@ -41,8 +54,9 @@ def save_triage_session(
             user_id=user_id,
             user_email=user_email,
             session_id=session_id,
+            conversation=conversation,
         )
-        print(f"✅ Saved to PostgreSQL: {risk_level}")
+        print(f"✅ Saved to PostgreSQL: {risk_level} (Conversation: {conversation.id if conversation else 'None'})")
         return session
     except Exception as e:
         print(f"⚠️ Database save failed: {e}")

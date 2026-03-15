@@ -46,16 +46,21 @@ export async function register(name, email, password) {
  * @param {number} lat - Latitude (optional)
  * @param {number} lng - Longitude (optional)
  * @param {AbortSignal} signal - AbortSignal for request cancellation (optional)
+ * @param {string} conversationId - Conversation ID to group multiple symptoms (optional)
  * @returns {Promise<Object>} Triage result with risk, advice, dos/donts, etc.
  */
-export async function submitTriage(symptoms, lat = null, lng = null, signal = null) {
+export async function submitTriage(symptoms, lat = null, lng = null, signal = null, conversationId = null) {
   try {
+    // Generate a unique session ID for each submission
+    const sessionId = `session_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    
     const payload = {
       symptoms,
       lat: lat ?? null,
       lng: lng ?? null,
       district: '',
-      session_id: '',
+      session_id: sessionId,
+      conversation_id: conversationId,
     };
     
     const config = {};
@@ -139,6 +144,23 @@ export async function getHistory() {
     return response.data;
   } catch (error) {
     console.error('getHistory error:', error);
+    throw error;
+  }
+}
+
+/**
+ * Delete a consultation by session ID
+ * @param {string} sessionId - The session ID to delete
+ * @returns {Promise<Object>} Response message
+ */
+export async function deleteConsultation(sessionId) {
+  try {
+    const response = await apiClient.delete('/history/', {
+      params: { session_id: sessionId }
+    });
+    return response.data;
+  } catch (error) {
+    console.error('deleteConsultation error:', error);
     throw error;
   }
 }
