@@ -4,6 +4,7 @@ asgiref==3.11.1
 baato==1.0.1
 certifi==2026.2.25
 charset-normalizer==3.4.5
+chromadb>=1.4.0
 decorator==5.2.1
 distro==1.9.0
 Django==4.2.29

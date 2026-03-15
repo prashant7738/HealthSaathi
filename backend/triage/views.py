@@ -14,6 +14,7 @@ from .serializers import (
 )
 from .ai_client import analyze_symptoms
 from .database_client import save_triage_session, get_real_stats
+from .chromadb import ChromaDBManager
 
 
 class RegisterView(APIView):
@@ -110,25 +111,34 @@ class TriageView(APIView):
 
         # 2. Save to PostgreSQL
         save_triage_session(
-    symptoms        = symptoms,
-    risk_level      = result["risk"],
-    advice          = result.get("brief_advice", ""),     # ← updated
-    action          = result.get("dos", ""),              # ← updated
-    nepali_advice   = result.get("nepali_advice", ""),
-    brief_advice    = result.get("brief_advice", ""),     # ← added
-    detailed_advice = result.get("detailed_advice", ""),  # ← added
-    food_eat        = result.get("food_eat", ""),         # ← added
-    food_avoid      = result.get("food_avoid", ""),       # ← added
-    dos             = result.get("dos", ""),              # ← added
-    donts           = result.get("donts", ""),            # ← added
-    district        = district,
-    latitude        = lat,
-    longitude       = lng,
-    user_id         = request.user.id if request.user.is_authenticated else None,
-    user_email      = request.user.email if request.user.is_authenticated else "",
-    session_id      = session_id,
-)
-        
+            symptoms        = symptoms,
+            risk_level      = result["risk"],
+            advice          = result.get("brief_advice", ""),
+            action          = result.get("dos", ""),
+            nepali_advice   = result.get("nepali_advice", ""),
+            brief_advice    = result.get("brief_advice", ""),
+            detailed_advice = result.get("detailed_advice", ""),
+            food_eat        = result.get("food_eat", ""),
+            food_avoid      = result.get("food_avoid", ""),
+            dos             = result.get("dos", ""),
+            donts           = result.get("donts", ""),
+            district        = district,
+            latitude        = lat,
+            longitude       = lng,
+            user_id         = request.user.id if request.user.is_authenticated else None,
+            user_email      = request.user.email if request.user.is_authenticated else "",
+            session_id      = session_id,
+        )
+
+        # 3. Save to ChromaDB for context awareness
+        if request.user.is_authenticated:
+            user_id = request.user.id
+            ChromaDBManager.save_to_history(
+                user_id=user_id,
+                query=symptoms,
+                response=result,
+                risk_level=result.get("risk", "UNKNOWN")
+            )
 
         return Response(result, status=status.HTTP_200_OK)
 
@@ -203,3 +213,54 @@ class StatsView(APIView):
         })
 
 
+class ChromaDBStatsView(APIView):
+    """Get ChromaDB statistics and collection information"""
+    def get(self, request):
+        try:
+            stats = ChromaDBManager.get_stats()
+            return Response({
+                "chromadb_stats": stats,
+                "message": "ChromaDB collections active and storing data"
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                "error": f"Failed to get ChromaDB stats: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+class UserContextView(APIView):
+    """Get user's ChromaDB context history for context-aware responses"""
+    def get(self, request):
+        """Get user's conversation history for context"""
+        if not request.user.is_authenticated:
+            return Response(
+                {"error": "Authentication required"},
+                status=status.HTTP_401_UNAUTHORIZED
+            )
+        
+        # Get recent query from request params for context retrieval
+        query = request.query_params.get("query", "")
+        n_results = int(request.query_params.get("n_results", 5))
+        
+        if not query:
+            return Response(
+                {"error": "query parameter is required"},
+                status=status.HTTP_400_BAD_REQUEST
+            )
+        
+        try:
+            context = ChromaDBManager.get_user_context(
+                user_id=request.user.id,
+                query=query,
+                n_results=n_results
+            )
+            return Response({
+                "user_id": request.user.id,
+                "query": query,
+                "context": context,
+                "message": "User context retrieved successfully"
+            }, status=status.HTTP_200_OK)
+        except Exception as e:
+            return Response({
+                "error": f"Failed to retrieve context: {str(e)}"
+            }, status=status.HTTP_500_INTERNAL_SERVER_ERROR)

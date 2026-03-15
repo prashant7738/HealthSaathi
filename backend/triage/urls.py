@@ -5,7 +5,9 @@ from .views import (
     RegisterView,
     LoginView,
     LogoutView,
-    HistoryView
+    HistoryView,
+    ChromaDBStatsView,
+    UserContextView
 )
 
 urlpatterns = [
@@ -20,4 +22,8 @@ urlpatterns = [
     # Stats & History
     path('stats/', StatsView.as_view(), name='stats'),
     path('history/', HistoryView.as_view(), name='history'),
+    
+    # ChromaDB
+    path('chromadb/stats/', ChromaDBStatsView.as_view(), name='chromadb_stats'),
+    path('chromadb/context/', UserContextView.as_view(), name='user_context'),
 ]
