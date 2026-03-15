@@ -1,7 +1,7 @@
 import json
 import os
+import requests
 from dotenv import load_dotenv
-from groq import Groq
 
 load_dotenv()
 
@@ -83,11 +83,17 @@ def analyze_symptoms(symptoms: str) -> dict:
 
 def _try_groq(symptoms: str) -> dict | None:
     try:
-        client = Groq(api_key=os.getenv("GROQ_API_KEY"))
-
-        response = client.chat.completions.create(
-            model="llama-3.3-70b-versatile",
-            messages=[
+        api_key = os.getenv("GROQ_API_KEY")
+        if not api_key:
+            return None
+        
+        headers = {
+            "Authorization": f"Bearer {api_key}",
+            "Content-Type": "application/json"
+        }
+        payload = {
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
                 {
                     "role": "system",
                     "content": SYSTEM_PROMPT
@@ -97,12 +103,21 @@ def _try_groq(symptoms: str) -> dict | None:
                     "content": f"Detect the language of these symptoms and respond in the same language. Patient symptoms: {symptoms}"
                 }
             ],
-            temperature=0.2,
-            max_tokens=1024,
+            "temperature": 0.2,
+            "max_tokens": 1024,
+        }
+        
+        response = requests.post(
+            "https://api.groq.com/openai/v1/chat/completions",
+            headers=headers,
+            json=payload,
+            timeout=30
         )
-
-        text = response.choices[0].message.content.strip()
-        print(f"🤖 Groq raw response: {text}")
+        response.raise_for_status()
+        
+        data = response.json()
+        text = data["choices"][0]["message"]["content"].strip()
+        print(f"✅ Groq response: {text[:100]}...")
 
         return _parse_response(text, "Groq")
 
@@ -113,21 +128,38 @@ def _try_groq(symptoms: str) -> dict | None:
 
 def _try_gemini(symptoms: str) -> dict | None:
     try:
-        from google import genai
-
-        client = genai.Client(api_key=os.getenv("GEMINI_API_KEY"))
-
-        response = client.models.generate_content(
-            model="gemini-2.0-flash",
-            contents=f"{SYSTEM_PROMPT}\n\nDetect the language of these symptoms and respond in the same language. Patient symptoms: {symptoms}",
-            config={
+        api_key = os.getenv("GEMINI_API_KEY")
+        if not api_key:
+            return None
+        
+        url = f"https://generativelanguage.googleapis.com/v1/models/gemini-pro:generateContent?key={api_key}"
+        
+        payload = {
+            "contents": [
+                {
+                    "parts": [
+                        {
+                            "text": f"{SYSTEM_PROMPT}\n\nDetect the language of these symptoms and respond in the same language. Patient symptoms: {symptoms}"
+                        }
+                    ]
+                }
+            ],
+            "generationConfig": {
                 "temperature": 0.2,
-                "max_output_tokens": 1024,
+                "maxOutputTokens": 1024,
             }
+        }
+        
+        response = requests.post(
+            url,
+            json=payload,
+            timeout=30
         )
-
-        text = response.text.strip()
-        print(f"🤖 Gemini raw response: {text}")
+        response.raise_for_status()
+        
+        data = response.json()
+        text = data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        print(f"✅ Gemini response: {text[:100]}...")
 
         return _parse_response(text, "Gemini")
 
