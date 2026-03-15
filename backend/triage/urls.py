@@ -17,6 +17,7 @@ urlpatterns = [
     path("auth/logout/", LogoutView.as_view(), name="logout"),
     path("triage/", TriageView.as_view(), name="triage"),
     path('stats/', StatsView.as_view(), name='stats'),
+    path('baato/',          BaatoView.as_view()),
     path('history/', HistoryView.as_view(), name='history'),
     path('chromadb/stats/', ChromaDBStatsView.as_view(), name='chromadb_stats'),
     path('chromadb/context/', UserContextView.as_view(), name='user_context'),
