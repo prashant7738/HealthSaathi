@@ -1,1 +1,0 @@
-HealthSaathi is an AI health assistant triage system.
