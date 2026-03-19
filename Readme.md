@@ -56,9 +56,28 @@ In remote areas of Nepal, people often don't know how serious their symptoms are
 - 📵 **Offline Ready** — Hardcoded health posts for connectivity issues
 
 ---
+<img width="1301" height="202" alt="ss1" src="https://github.com/user-attachments/assets/99247e3e-6f7f-4853-a2a9-540eb538b7cb" />
+
+
+<img width="950" height="811" alt="ss2" src="https://github.com/user-attachments/assets/19f0164a-a501-4f79-a02c-518f34231228" />
+
+
+<img width="825" height="502" alt="ss3" src="https://github.com/user-attachments/assets/a57155a3-4f50-4f28-bd5d-78db6446c8fb" />
+
+<img width="1312" height="944" alt="ss4" src="https://github.com/user-attachments/assets/cb7ba23b-e688-4de7-af9b-d2f59c1f88c1" />
+
+<img width="1312" height="944" alt="ss5" src="https://github.com/user-attachments/assets/0eca0c2a-7d31-40aa-9a8b-03c08ff6318b" />
+
+<img width="458" height="277" alt="ss6 1" src="https://github.com/user-attachments/assets/7f747dcd-223a-4d7c-a264-fda4ac069905" />
+
+<img width="1315" height="936" alt="ss7" src="https://github.com/user-attachments/assets/bf426457-ffbc-4efa-84ad-0c29a0bf1ecc" />
+
+<img width="1920" height="1080" alt="ss8" src="https://github.com/user-attachments/assets/8a964165-1e3e-41fb-aaf4-6d56da8e5be6" />
+
+<img width="1920" height="1080" alt="ss9" src="https://github.com/user-attachments/assets/fe5c913b-8394-4c1c-94f6-75e5857a2d92" />
+
 
 ## 🚀 Features
-
 | Feature | Description | Status |
 |---------|-------------|--------|
 | 🩺 **AI Symptom Triage** | Describe symptoms, get instant risk assessment (HIGH/MEDIUM/LOW) | ✅ |
