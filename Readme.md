@@ -42,39 +42,39 @@ In remote areas of Nepal, people often don't know how serious their symptoms are
 
 
 ---
-** Ask Health Related Questioon**
+**Ask Health Related Questioon**
 
 <img width="1301" height="202" alt="ss1" src="https://github.com/user-attachments/assets/99247e3e-6f7f-4853-a2a9-540eb538b7cb" />
 
-** Get the Response in well formatted - Real Doctor Type Suggestion**
+**Get the Response in well formatted - Real Doctor Type Suggestion**
 
 <img width="950" height="811" alt="ss2" src="https://github.com/user-attachments/assets/19f0164a-a501-4f79-a02c-518f34231228" />
 
-** Get the Location Of Nearby Health Facility According to the Urgency and Need of the Situation**
+**Get the Location Of Nearby Health Facility According to the Urgency and Need of the Situation**
 
 <img width="825" height="502" alt="ss3" src="https://github.com/user-attachments/assets/a57155a3-4f50-4f28-bd5d-78db6446c8fb" />
 
-** In-Chat Memory. Can Ask follow up question as Context Passing is Used**
+**In-Chat Memory. Can Ask follow up question as Context Passing is Used**
 
 <img width="1312" height="944" alt="ss4" src="https://github.com/user-attachments/assets/cb7ba23b-e688-4de7-af9b-d2f59c1f88c1" />
 
-** Can Analyze Medical Report and Image [Both Nepali and English] **
+**Can Analyze Medical Report and Image [Both Nepali and English]**
 
 <img width="1312" height="944" alt="ss5" src="https://github.com/user-attachments/assets/0eca0c2a-7d31-40aa-9a8b-03c08ff6318b" />
 
-** Can Generate a Representative AI image to show any Visual Representation **
+**Can Generate a Representative AI image to show any Visual Representation**
 
 <img width="458" height="277" alt="ss6 1" src="https://github.com/user-attachments/assets/7f747dcd-223a-4d7c-a264-fda4ac069905" />
 
-** The RESULT **
+**The RESULT**
 
 <img width="1315" height="936" alt="ss7" src="https://github.com/user-attachments/assets/bf426457-ffbc-4efa-84ad-0c29a0bf1ecc" />
 
-** MultiLingual Voice and Text(Both Nepali and English Supported) **
+**MultiLingual Voice and Text(Both Nepali and English Supported)**
 
 <img width="1920" height="1080" alt="ss8" src="https://github.com/user-attachments/assets/8a964165-1e3e-41fb-aaf4-6d56da8e5be6" />
 
-** Interactive DashBoard **
+**Interactive DashBoard**
 
 <img width="1920" height="1080" alt="ss9" src="https://github.com/user-attachments/assets/fe5c913b-8394-4c1c-94f6-75e5857a2d92" />
 
@@ -423,6 +423,6 @@ HealthSaathi/
 
 ## 📞 Support
 
-- 📧 Email: bhattsushil567@gmail.com
+- 📧 Email: prashantkafle7738@gmail.com
 - github: [GitHub](https://github.com/prashant7738)
           
